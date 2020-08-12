@@ -16,13 +16,17 @@ from .grpclib.exceptions import StreamClosedError
 
 
 class SocketWrapper(async_exit_stack.AsyncExitStack):
-    def __init__(self, grpc_connection: GRPCConnection, sock: anyio.SocketStream):
+    def __init__(self, grpc_connection: GRPCConnection, sock: anyio.SocketStream,
+                 is_unix_socket: bool = False):
         super().__init__()
-        self._set_socket_options(sock)
+        self._is_unix_socket = is_unix_socket
+        if not self._is_unix_socket:
+            self._set_socket_options(sock)
         self._socket = sock
         self._grpc_connection = grpc_connection
         self._flush_event = anyio.create_event()
         self._running = True
+        self._is_unix_socket = is_unix_socket
 
     async def __aenter__(self):
         await super().__aenter__()
@@ -197,10 +201,13 @@ class GRPCSocket(async_exit_stack.AsyncExitStack):
     StreamClass = GRPCStream
 
     def __init__(self, config: GRPCConfiguration, sock,
-                 receive_buffer_size=1024*1024):
+                 receive_buffer_size=1024*1024, is_unix_socket: bool = False):
         super().__init__()
         self._grpc_connection = GRPCConnection(config=config)
-        self._socket = SocketWrapper(self._grpc_connection, sock)
+        self._is_unix_socket = is_unix_socket
+        self._socket = SocketWrapper(
+            self._grpc_connection, sock, is_unix_socket=self._is_unix_socket
+        )
         self._receive_buffer_size = receive_buffer_size
         self._streams = {}  # type: Dict[int, GRPCStream]
 
